@@ -1,0 +1,19 @@
+# Personal data — never publish
+categories/cat_personal.csv
+
+# Raw and derived bank statement data (contains personal financial data)
+statements/
+statements_tabula/
+statements_parsed/
+
+# Vendored Tabula app + bundled JDK (large binaries; redistribution-restricted)
+tabula/
+
+# Local editor / tooling config
+.claude/
+
+# macOS / Python cruft
+.DS_Store
+**/.DS_Store
+__pycache__/
+*.pyc
