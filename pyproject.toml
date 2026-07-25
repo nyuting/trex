@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trex"
+version = "0.1.0"
+description = "Turn credit-card PDF statements into categorized monthly expense summaries."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = ["pdfplumber>=0.11"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov", "ruff>=0.6"]
+
+[project.scripts]
+trex = "trex.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N", "RET", "C4"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+# Notebooks import the whole workflow up front; some calls are commented out
+# until needed, which is the point of an interactive notebook.
+"notebooks/*.ipynb" = ["F401"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

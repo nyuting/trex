@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./data/statements/**)",
+      "Read(./data/extracted/**)",
+      "Read(./data/parsed/**)",
+      "Read(./data/categories/cat.csv)",
+      "Read(./**/*.pdf)"
+    ]
+  }
+}

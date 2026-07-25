@@ -1,19 +1,29 @@
-# Personal data — never publish
-categories/cat_personal.csv
-
-# Raw and derived bank statement data (contains personal financial data)
-statements/
-statements_tabula/
-statements_parsed/
-
-# Vendored Tabula app + bundled JDK (large binaries; redistribution-restricted)
-tabula/
-
-# Local editor / tooling config
-.claude/
-
-# macOS / Python cruft
 .DS_Store
-**/.DS_Store
 __pycache__/
-*.pyc
+*.py[cod]
+
+# Personal financial data — never commit to the public repo.
+# Statement PDFs and everything derived from them stay local; only the
+# directory placeholders are tracked.
+data/statements/*
+data/extracted/*
+data/parsed/*
+!data/statements/.gitkeep
+!data/extracted/.gitkeep
+!data/parsed/.gitkeep
+
+# Rules naming a person rather than a merchant
+data/categories/cat_personal.csv
+
+# Packaging / tooling
+.venv/
+*.egg-info/
+build/
+dist/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Claude Code local overrides (.claude/settings.json IS committed)
+.claude/settings.local.json

@@ -1,0 +1,24 @@
+Statement Date, 2026-01-31
+
+date,cost,remark,category,source
+01/14,-1000.00,PAYMT THRU E-BANK/HOMEB/CYBERB,payment,UOB-ONE
+
+1 DINING
+   1  01/03     18.40    1    UOB-ONE  ACME COFFEE HOUSE
+   2  01/11     42.15    1    UOB-ONE  ACME COFFEE HOUSE
+   3  01/28      9.99    1    UOB-ONE  UNKNOWN MERCHANT XYZ
+                70.54    1      Total  DINING
+
+2 GROCERIES
+   4  01/07     96.30    2    UOB-ONE  GREENMART SUPERMARKET
+                96.30    2      Total  GROCERIES
+
+3 TRANSPORT
+   5  01/19     12.00    3   UOB-VISA  CITY RAIL TOP UP
+                12.00    3      Total  TRANSPORT
+
+multi-category
+"   6  01/25     63.75  2,7    UOB-ONE  SUNDRY SHOP 88"
+                63.75           Total  multi-category
+
+               242.59           Total  
