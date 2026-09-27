@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 from trex.config import get_extracted_dir, get_statements_dir
+from trex.constants import ISSUER_BY_PREFIX, ISSUER_CHASE, ISSUER_PAYLAH, ISSUER_UOB
 from trex.extract.chase import extract_chase_lines
 from trex.extract.paylah import extract_paylah_lines
 from trex.extract.pdf import PageRow, read_pdf_rows
@@ -20,34 +21,37 @@ logger = get_logger(__name__)
 
 __all__ = [
     "EXTRACTORS",
-    "detect_issuer_prefix",
+    "detect_issuer",
     "extract_all_pdfs",
     "extract_pdf_to_csv",
-    "short_name",
+    "derive_short_name",
 ]
 
-#: Filename prefix -> the function that reads that issuer's pages.
+#: Issuer -> the function that reads that issuer's pages.
 EXTRACTORS = {
-    "Chase": extract_chase_lines,
-    "PLG": extract_paylah_lines,
-    "PLY": extract_paylah_lines,
-    "UOB": extract_uob_lines,
+    ISSUER_CHASE: extract_chase_lines,
+    ISSUER_PAYLAH: extract_paylah_lines,
+    ISSUER_UOB: extract_uob_lines,
 }
 
 #: A statement's short name is its leading letters plus digits, e.g. "UOB05".
 SHORT_NAME_RE = re.compile(r"^([A-Za-z]+\d+)")
 
 
-def detect_issuer_prefix(path: str | Path) -> str:
-    """Return the EXTRACTORS key for a statement path, from its filename prefix."""
-    name = Path(path).name
-    for prefix in EXTRACTORS:
-        if name.startswith(prefix):
-            return prefix
-    raise ValueError(f"unknown statement type for {name}")
+def detect_issuer(path_or_name: str | Path) -> str:
+    """Return the issuer family for a statement path or short name (e.g. ``UOB05``).
+
+    Matches the filename's prefix against `ISSUER_BY_PREFIX`, ignoring case.
+    """
+    name = Path(path_or_name).name
+    upper = name.upper()
+    for prefix, issuer in ISSUER_BY_PREFIX.items():
+        if upper.startswith(prefix):
+            return issuer
+    raise ValueError(f"unknown issuer for {name!r}")
 
 
-def short_name(path: str | Path) -> str:
+def derive_short_name(path: str | Path) -> str:
     """Return the statement's short name, e.g. ``UOB05.pdf`` -> ``UOB05``."""
     name = Path(path).name
     match = SHORT_NAME_RE.match(name)
@@ -56,26 +60,39 @@ def short_name(path: str | Path) -> str:
     return match.group(1)
 
 
-def extract_pdf_to_csv(source_path: str | Path, dest_path: str | Path | None = None) -> Path:
+def extract_pdf_to_csv(pdf_path: str | Path, dest_path: str | Path | None = None) -> Path:
     """Extract one statement PDF to a raw CSV and return the path written.
 
     Defaults to ``<extracted dir>/<short name>.csv``.
     """
-    source_path = Path(source_path)
+    pdf_path = Path(pdf_path)
     if dest_path is None:
-        dest_path = get_extracted_dir() / f"{short_name(source_path)}.csv"
+        dest_path = get_extracted_dir() / f"{derive_short_name(pdf_path)}.csv"
     dest_path = Path(dest_path)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    pages: list[list[PageRow]] = read_pdf_rows(source_path)
-    lines = EXTRACTORS[detect_issuer_prefix(source_path)](pages)
+    pages: list[list[PageRow]] = read_pdf_rows(pdf_path)
+    lines = EXTRACTORS[detect_issuer(pdf_path)](pages)
     dest_path.write_text("\n".join(lines) + "\n", newline="")
 
     logger.info("wrote %s", dest_path)
     return dest_path
 
 
-def extract_all_pdfs(source_dir: str | Path | None = None) -> list[Path]:
-    """Extract every PDF in the statements directory. Returns the paths written."""
-    source_dir = Path(source_dir) if source_dir is not None else get_statements_dir()
-    return [extract_pdf_to_csv(pdf) for pdf in sorted(source_dir.glob("*.pdf"))]
+def extract_all_pdfs(pdf_dir: str | Path | None = None) -> list[Path]:
+    """Extract every PDF in the statements directory. Returns the paths written.
+
+    A PDF whose filename names no known issuer or short name is not a statement;
+    it is skipped with a warning rather than aborting the rest of the batch.
+    """
+    pdf_dir = Path(pdf_dir) if pdf_dir is not None else get_statements_dir()
+    written = []
+    for pdf in sorted(pdf_dir.glob("*.pdf")):
+        try:
+            detect_issuer(pdf)
+            derive_short_name(pdf)
+        except ValueError as err:
+            logger.warning("skipping %s: %s", pdf.name, err)
+            continue
+        written.append(extract_pdf_to_csv(pdf))
+    return written

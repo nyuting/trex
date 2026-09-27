@@ -4,7 +4,7 @@ Typical use is the module-level convenience pair, which shares one lazily loaded
 rule set for a whole run::
 
     category = classify_remark("UOB-ONE", 12.50, "ACME COFFEE HOUSE")
-    flush_rules()  # persist any rules that classifying added
+    save_rules_if_changed()  # persist any rules that classifying added
 
 Anything that needs isolation (tests, alternate rule files) should build its own
 `CatRules` instead.
@@ -22,7 +22,7 @@ __all__ = [
     "CatRule",
     "CatRules",
     "classify_remark",
-    "flush_rules",
+    "save_rules_if_changed",
     "get_rules",
     "read_brands",
     "regroup_cat_file",
@@ -48,11 +48,11 @@ def reset_rules() -> None:
     _rules = None
 
 
-def classify_remark(source: str | None, cost: float, remark: str) -> Category:
+def classify_remark(card: str | None, cost: float, remark: str) -> Category:
     """Return the category for a transaction using the shared rule set."""
-    return get_rules().classify_remark(source, cost, remark)
+    return get_rules().classify_remark(card, cost, remark)
 
 
-def flush_rules() -> bool:
+def save_rules_if_changed() -> bool:
     """Write the shared rule set back to cat.csv if it changed."""
-    return get_rules().flush()
+    return get_rules().save_if_changed()

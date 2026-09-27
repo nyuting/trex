@@ -14,14 +14,14 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
-from trex.categorize import classify_remark, flush_rules, regroup_cat_file, suggest_brands
+from trex.categorize import classify_remark, regroup_cat_file, save_rules_if_changed, suggest_brands
 from trex.config import get_data_dir, get_parsed_dir
-from trex.constants import CATEGORIES, SOURCES_BY_ID
+from trex.constants import CARDS_BY_ID, CATEGORIES
 from trex.extract import extract_all_pdfs, extract_pdf_to_csv
 from trex.models import Credit, Statement, Transaction
 from trex.parse import parse_statement
-from trex.reconcile import list_pending_updates, reconcile_update, regroup_update
-from trex.serialize import read_parsed_csv, write_parsed_csv
+from trex.reconcile import reconcile_in_place
+from trex.serialize import read_parsed_expenses, write_parsed_csv
 from trex.summary import (
     check_summary_total,
     find_duplicated_statements,
@@ -31,7 +31,7 @@ from trex.summary import (
 
 __all__ = [
     "CATEGORIES",
-    "SOURCES_BY_ID",
+    "CARDS_BY_ID",
     "Credit",
     "Statement",
     "Transaction",
@@ -42,14 +42,12 @@ __all__ = [
     "extract_pdf_to_csv",
     "find_duplicated_statements",
     "find_uncategorized",
-    "flush_rules",
+    "save_rules_if_changed",
     "get_data_dir",
     "get_parsed_dir",
-    "list_pending_updates",
     "parse_statement",
-    "read_parsed_csv",
-    "reconcile_update",
-    "regroup_update",
+    "read_parsed_expenses",
+    "reconcile_in_place",
     "regroup_cat_file",
     "suggest_brands",
     "summarize",

@@ -1,6 +1,6 @@
 """Maintenance passes over the rule files: merge rules, sort and suggest brands.
 
-These are housekeeping commands run by hand (``trex rules ...``), not part of
+These are housekeeping commands run manually (``trex rules ...``), not part of
 the parse pipeline.
 """
 
@@ -22,10 +22,10 @@ from trex.categorize.brands import (
     pick_representative_remark,
     unescape_literal,
 )
-from trex.categorize.rules import CAT_CSV_HEADER, CatRule, CatRules
+from trex.categorize.rules import CatRule, CatRules
+from trex.cells import parse_id_list
 from trex.config import get_brands_file, get_cat_file
 from trex.log import get_logger
-from trex.text import parse_num_list
 
 logger = get_logger(__name__)
 
@@ -41,7 +41,7 @@ class _RuleGroupCandidate:
 
     pattern: str
     category_ids: set[int]
-    source_ids: set[int]
+    card_ids: set[int]
     literal: str | None
     compiled: re.Pattern[str] | None
     key: str = field(default="")
@@ -106,8 +106,8 @@ def _read_candidates(path: Path) -> list[_RuleGroupCandidate]:
     for row in rows:
         if len(row) != 3:
             continue
-        pattern, category_cell, source_cell = row
-        category_ids = set(parse_num_list(category_cell))
+        pattern, category_cell, card_cell = row
+        category_ids = set(parse_id_list(category_cell))
         if not category_ids:
             continue
         literal = unescape_literal(pattern)
@@ -121,7 +121,7 @@ def _read_candidates(path: Path) -> list[_RuleGroupCandidate]:
             _RuleGroupCandidate(
                 pattern=pattern,
                 category_ids=category_ids,
-                source_ids=set(parse_num_list(source_cell)),
+                card_ids=set(parse_id_list(card_cell)),
                 literal=literal,
                 compiled=compiled,
             )
@@ -145,7 +145,7 @@ def _merge_candidates(candidates: list[_RuleGroupCandidate]) -> list[CatRule]:
         if candidate.compiled is None:
             continue
         for other_index, other in enumerate(candidates):
-            if index == other_index or not other.is_literal:
+            if index == other_index or other.literal is None:
                 continue
             if candidate.compiled.match(other.literal):
                 groups.union(index, other_index)
@@ -162,15 +162,15 @@ def _fuse_group(members: list[_RuleGroupCandidate]) -> list[CatRule]:
     Returns the members unchanged when fusing them would produce a pattern too
     generic to be safe (see `MIN_FUSED_PREFIX`).
     """
-    literals = [m.literal for m in members if m.is_literal]
+    literals = [m.literal for m in members if m.literal is not None]
     regexes = [m.pattern for m in members if not m.is_literal]
 
     category_ids: set[int] = set()
-    source_ids: set[int] = set()
+    card_ids: set[int] = set()
     brand: str | None = None
     for member in members:
         category_ids |= member.category_ids
-        source_ids |= member.source_ids
+        card_ids |= member.card_ids
         if brand is None and member.key.startswith(BRAND_KEY_PREFIX):
             brand = member.key[len(BRAND_KEY_PREFIX) :]
 
@@ -181,9 +181,9 @@ def _fuse_group(members: list[_RuleGroupCandidate]) -> list[CatRule]:
             os.path.commonprefix(literals),
             MIN_FUSED_PREFIX,
         )
-        return [CatRule(m.pattern, sorted(m.category_ids), m.source_ids) for m in members]
+        return [CatRule(m.pattern, sorted(m.category_ids), m.card_ids) for m in members]
 
-    return [CatRule(_fuse_pattern(literals, regexes, brand), sorted(category_ids), source_ids)]
+    return [CatRule(_fuse_pattern(literals, regexes, brand), sorted(category_ids), card_ids)]
 
 
 def _is_too_generic(literals: list[str], regexes: list[str], brand: str | None) -> bool:
@@ -233,11 +233,8 @@ def drop_regexes_covered_by_others(patterns: list[str]) -> list[str]:
         samples.append(pick_representative_remark(pattern))
 
     def covers(broader: int, narrower: int) -> bool:
-        return (
-            compiled[broader] is not None
-            and samples[narrower] is not None
-            and compiled[broader].match(samples[narrower]) is not None
-        )
+        regex, sample = compiled[broader], samples[narrower]
+        return regex is not None and sample is not None and regex.match(sample) is not None
 
     kept: list[int] = []
     for index in range(len(patterns)):
@@ -252,7 +249,6 @@ def _write_rules(path: Path, rules: list[CatRule]) -> None:
     """Write rules to cat.csv in canonical order (first category, then pattern)."""
     rule_set = CatRules(path)
     rule_set.rules = rules
-    rule_set.header = list(CAT_CSV_HEADER)
     rule_set.write(path)
 
 

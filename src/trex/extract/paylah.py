@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from trex.extract.pdf import PageRow, find_in_cells, format_csv_line, iter_rows
+from trex.extract.pdf import PageRow, find_in_cells, format_csv_line, iter_row_cells
 
 #: The statement date at the top of the first page, e.g. "31 Jan 2026".
 STATEMENT_DATE_RE = re.compile(r"^(\d{2}\s\w{3}\s\d{4})\b")
@@ -15,26 +15,44 @@ AMOUNT_RE = re.compile(r"^(.+?)\s+(CR|DB)$")
 #: A transaction's date and description, e.g. "05 Jan ACME COFFEE".
 DATE_AND_DESCRIPTION_RE = re.compile(r"^(\d{2}\s\w{3})\s+(.+)$")
 
+PREVIOUS_BALANCE = "PREVIOUS BALANCE"
+#: The label the closing balance is emitted under, whichever way the PDF prints it.
+CLOSING_BALANCE = "CLOSING BALANCE"
+#: The closing balance's label: "Total :" on older statements,
+#: "Total Balance Carried Forward:" on newer ones. The one-cell "Total: 1.00 CR" summary near
+#: the top of later statements is a different row and never matches.
+CLOSING_BALANCE_RE = re.compile(r"^Total(?: Balance Carried Forward)?\s*:$")
+
 
 def extract_paylah_lines(
     pages: list[list[PageRow]], include_statement_date: bool = True
 ) -> list[str]:
     """Return CSV lines for the transactions in a PayLah statement.
 
-    Each transaction becomes ``date,description,amount,CR|DB``; reference lines
-    are kept as their own row so the parser can attach them to the transaction
-    above.
+    Emits the statement date first, then the wallet's previous and closing
+    balance as ``label,amount`` lines (``PREVIOUS BALANCE``, ``CLOSING
+    BALANCE``), then each transaction as ``date,description,amount,CR|DB``.
+    Reference lines are kept as their own row so the parser can attach them to
+    the transaction above.
     """
     lines: list[str] = []
+    balances: dict[str, str] = {}
     seen_statement_date = False
 
-    for cells, _description, _amount in iter_rows(pages):
+    for cells, _description, _amount in iter_row_cells(pages):
         if include_statement_date and not seen_statement_date:
             statement_date = find_in_cells(cells, STATEMENT_DATE_RE)
             if statement_date:
                 lines.append(format_csv_line([statement_date.group(1)]))
                 seen_statement_date = True
                 continue
+
+        if len(cells) == 2 and cells[0] == PREVIOUS_BALANCE:
+            balances.setdefault(PREVIOUS_BALANCE, format_csv_line([PREVIOUS_BALANCE, cells[1]]))
+            continue
+        if len(cells) == 2 and CLOSING_BALANCE_RE.match(cells[0]):
+            balances[CLOSING_BALANCE] = format_csv_line([CLOSING_BALANCE, cells[1]])
+            continue
 
         reference = find_in_cells(cells, REFERENCE_RE)
         if reference:
@@ -44,6 +62,12 @@ def extract_paylah_lines(
         line = _transaction_line(cells)
         if line is not None:
             lines.append(line)
+
+    # The balances belong with the statement date, ahead of the transactions.
+    at = 1 if seen_statement_date else 0
+    lines[at:at] = [
+        balances[label] for label in (PREVIOUS_BALANCE, CLOSING_BALANCE) if label in balances
+    ]
     return lines
 
 

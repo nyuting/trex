@@ -1,18 +1,41 @@
+# Mirrors the .githooks/pre-push gate. The hooks can be bypassed with
+# --no-verify; this cannot. Both call the same Makefile targets.
 name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  check:
+    name: lint · types · tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor from requires-python, and the version pinned in .python-version.
+        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
-      - run: pip install -e ".[dev]"
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: pytest
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --locked --extra dev --python ${{ matrix.python-version }}
+
+      - name: Lint
+        run: make lint
+
+      - name: Types
+        run: make type
+
+      - name: Tests
+        run: make test

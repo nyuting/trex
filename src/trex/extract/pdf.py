@@ -9,10 +9,15 @@ mode, which needed a JDK.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pdfplumber
+
+if TYPE_CHECKING:
+    from pdfplumber.page import Page
 
 #: Points. Words within this vertical distance of each other share a row.
 ROW_TOLERANCE = 3.0
@@ -22,7 +27,7 @@ CELL_GAP = 8.0
 WORD_TOLERANCE = 1.5
 
 #: Cells that look like a money amount, optionally flagged credit/debit.
-AMOUNT_RE = re.compile(r"^-?[\d,]+\.\d{2}(\s+(CR|DB))?$")
+AMOUNT_RE = re.compile(r"^-?[\d,]*\.\d{2}(\s+(CR|DB))?$")
 
 #: Separator used to merge the leading cells back into one description cell.
 CELL_JOIN = " "
@@ -35,12 +40,8 @@ class PageRow:
     text: str
     amount: str
 
-    @property
-    def is_empty(self) -> bool:
-        return not self.text.strip() and not self.amount.strip()
 
-
-def group_words_into_rows(page) -> list[list[dict]]:
+def group_words_into_rows(page: Page) -> list[list[dict]]:
     """Return the page's words grouped into rows, each sorted left to right."""
     rows: dict[float, list[dict]] = {}
     for word in page.extract_words(x_tolerance=WORD_TOLERANCE, use_text_flow=False):
@@ -80,7 +81,7 @@ def _to_page_row(words: list[dict]) -> PageRow:
     return PageRow(CELL_JOIN.join(cells), "")
 
 
-def iter_rows(pages: list[list[PageRow]]):
+def iter_row_cells(pages: list[list[PageRow]]) -> Iterator[tuple[list[str], str, str]]:
     """Yield (non-empty cells, description, amount) for every non-blank row.
 
     ``cells`` keeps every populated field of the row, because an issuer marker

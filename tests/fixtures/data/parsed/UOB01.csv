@@ -1,7 +1,25 @@
 Statement Date, 2026-01-31
 
-date,cost,remark,category,source
+date,cost,remark,category,card
+,1000.00,previous balance,,UOB-ONE
 01/14,-1000.00,PAYMT THRU E-BANK/HOMEB/CYBERB,payment,UOB-ONE
+,-1000.00,credits,total,UOB-ONE
+,230.59,spending,total,UOB-ONE
+,230.59,balance,total,UOB-ONE
+,230.59,statement balance,ok,UOB-ONE
+
+,0.00,previous balance,,UOB-VISA
+,0.00,credits,total,UOB-VISA
+,12.00,spending,total,UOB-VISA
+,12.00,balance,total,UOB-VISA
+,12.00,statement balance,ok,UOB-VISA
+
+,12000.00,UNI$ previous,,
+,250.00,UNI$ earned,,
+,0.00,UNI$ used,,
+,-10.00,UNI$ adjustment,,
+,12240.00,UNI$ balance,total,
+,12240.00,UNI$ statement balance,ok,
 
 1 DINING
    1  01/03     18.40    1    UOB-ONE  ACME COFFEE HOUSE

@@ -45,7 +45,7 @@ def get_categories_dir() -> Path:
 
 
 def get_cat_file() -> Path:
-    """Return the path to cat.csv (regex -> category ids, source ids)."""
+    """Return the path to cat.csv (regex -> category ids, card ids)."""
     return get_categories_dir() / "cat.csv"
 
 
@@ -76,6 +76,11 @@ def get_extracted_dir() -> Path:
 def get_parsed_dir() -> Path:
     """Return the directory of categorized, human-editable parsed CSVs."""
     return get_data_dir() / "parsed"
+
+
+def get_summary_dir() -> Path:
+    """Return the directory of yearly and per-month summaries, rebuilt by summarize."""
+    return get_data_dir() / "summary"
 
 
 def get_prior_dir() -> Path:

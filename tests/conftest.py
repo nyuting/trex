@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from trex.categorize import reset_rules
+from trex.categorize.rules import CatRules
 from trex.log import get_logger
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -30,3 +31,9 @@ def data_dir(tmp_path, monkeypatch) -> Path:
     shutil.copytree(FIXTURES_DIR / "data", destination)
     monkeypatch.setenv("TREX_DATA_DIR", str(destination))
     return destination
+
+
+@pytest.fixture
+def rules(data_dir) -> CatRules:
+    """The fixture tree's cat.csv and cat_personal.csv, loaded."""
+    return CatRules().load()

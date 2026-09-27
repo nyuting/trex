@@ -5,9 +5,13 @@ __pycache__/
 # Personal financial data — never commit to the public repo.
 # Statement PDFs and everything derived from them stay local; only the
 # directory placeholders are tracked.
+*.pdf
+*.PDF
 data/statements/*
 data/extracted/*
 data/parsed/*
+data/parsed_prior/
+data/summary/
 !data/statements/.gitkeep
 !data/extracted/.gitkeep
 !data/parsed/.gitkeep
@@ -21,9 +25,11 @@ data/categories/cat_personal.csv
 build/
 dist/
 .ruff_cache/
+.mypy_cache/
 .pytest_cache/
 .coverage
 htmlcov/
+.ipynb_checkpoints/
 
 # Claude Code local overrides (.claude/settings.json IS committed)
 .claude/settings.local.json

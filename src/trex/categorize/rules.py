@@ -13,18 +13,17 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from trex.cells import format_id_list, parse_id_list
 from trex.config import get_cat_file, get_personal_cat_file
-from trex.constants import SOURCE_IDS_BY_LABEL
+from trex.constants import CARD_IDS_BY_LABEL, CHASE_CARD_ID
 from trex.log import get_logger
-from trex.models import Category
-from trex.text import format_num_list, parse_num_list
+from trex.models import Category, category_from_ids
 
 logger = get_logger(__name__)
 
-CAT_CSV_HEADER = ["regex", "category", "source"]
+CAT_CSV_HEADER = ["regex", "category", "card"]
 
 #: Chase spending is holiday spending by definition; no rule is recorded for it.
-CHASE_SOURCE_ID = 1
 CHASE_FALLBACK_CATEGORY = 9
 
 #: Unmatched non-Chase transactions under this amount are assumed to be meals.
@@ -36,13 +35,13 @@ SMALL_PURCHASE_CATEGORY = 1
 class CatRule:
     """One row of cat.csv: a remark pattern, its categories, and where it was seen.
 
-    ``source_ids`` is a record of which cards this pattern has shown up on. It is
-    informational — every rule is tried against every source.
+    ``card_ids`` is a record of which cards this pattern has shown up on. It is
+    informational — every rule is tried against every card.
     """
 
     pattern: str
     category_ids: list[int]
-    source_ids: set[int] = field(default_factory=set)
+    card_ids: set[int] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         self.regex = re.compile(self.pattern)
@@ -53,16 +52,14 @@ class CatRule:
 
     def as_category(self) -> Category:
         """Return a bare id for a single-category rule, else a tuple of ids."""
-        if len(self.category_ids) == 1:
-            return self.category_ids[0]
-        return tuple(self.category_ids)
+        return category_from_ids(self.category_ids)
 
     def to_csv_row(self) -> list[str]:
         """Return this rule as a cat.csv row."""
         return [
             self.pattern,
             ",".join(str(c) for c in self.category_ids),
-            format_num_list(self.source_ids),
+            format_id_list(self.card_ids),
         ]
 
     def sort_key(self) -> tuple[int, str]:
@@ -74,10 +71,10 @@ class CatRules:
     """The cat.csv rule set: load it, match remarks against it, write it back.
 
     `extra_paths` are read-only rule files — cat_personal.csv by default. Their
-    rules match like any other, but `write` and `flush` only ever touch `path`,
+    rules match like any other, but `write` and `save_if_changed` only ever touch `path`,
     so personal rules never migrate into cat.csv.
 
-    `classify_remark` may add rules, which sets `dirty`; call `flush()` once at
+    `classify_remark` may add rules, which sets `dirty`; call `save_if_changed()` once at
     the end of a run to persist them.
     """
 
@@ -94,7 +91,6 @@ class CatRules:
         )
         self.rules: list[CatRule] = []
         self.extra_rules: list[CatRule] = []
-        self.header: list[str] = list(CAT_CSV_HEADER)
         self.dirty = False
 
     def __len__(self) -> int:
@@ -105,7 +101,7 @@ class CatRules:
         self.dirty = False
         with open(self.path) as handle:
             reader = csv.reader(handle)
-            self.header = next(reader, list(CAT_CSV_HEADER))
+            next(reader, None)  # the header; written back as CAT_CSV_HEADER
             self.rules = self._read_rules(reader, self.path)
         logger.debug("loaded %d rules from %s", len(self.rules), self.path)
 
@@ -136,13 +132,13 @@ class CatRules:
         if len(row) != 3:
             logger.debug("%s:%d skipped: expected 3 columns, got %d", path, line_number, len(row))
             return None
-        pattern, category_cell, source_cell = row
-        category_ids = parse_num_list(category_cell)
+        pattern, category_cell, card_cell = row
+        category_ids = parse_id_list(category_cell)
         if not category_ids:
             logger.debug("%s:%d skipped: no category ids in %r", path, line_number, category_cell)
             return None
         try:
-            return CatRule(pattern, category_ids, set(parse_num_list(source_cell)))
+            return CatRule(pattern, category_ids, set(parse_id_list(card_cell)))
         except re.error as error:
             logger.debug("%s:%d skipped: bad regex %r (%s)", path, line_number, pattern, error)
             return None
@@ -154,61 +150,61 @@ class CatRules:
                 return rule
         return None
 
-    def classify_remark(self, source: str | None, cost: float, remark: str) -> Category:
+    def classify_remark(self, card: str | None, cost: float, remark: str) -> Category:
         """Return the category (or categories) for a transaction.
 
-        Side effects, both of which set `dirty`: records `source` on the rule
+        Side effects, both of which set `dirty`: records `card` on the rule
         that matched if it is new there, and adds a DINING rule for an unmatched
         small non-Chase purchase.
         """
-        source_id = SOURCE_IDS_BY_LABEL.get(source or "")
-        if source_id is None:
+        card_id = CARD_IDS_BY_LABEL.get(card or "")
+        if card_id is None:
             return None
 
         matched = self.find(remark)
         if matched is not None:
-            self._record_source(matched, source_id)
+            self._record_card(matched, card_id)
             return matched.as_category()
 
-        if source_id == CHASE_SOURCE_ID:
+        if card_id == CHASE_CARD_ID:
             return CHASE_FALLBACK_CATEGORY
         if cost >= SMALL_PURCHASE_LIMIT:
             return None
-        return self._add_small_purchase_rule(source, source_id, remark)
+        return self._add_small_purchase_rule(card, card_id, remark)
 
-    def _record_source(self, rule: CatRule, source_id: int) -> None:
+    def _record_card(self, rule: CatRule, card_id: int) -> None:
         """Note that `rule` has now been seen on this card, if it hadn't been."""
-        if source_id not in rule.source_ids:
-            rule.source_ids.add(source_id)
+        if card_id not in rule.card_ids:
+            rule.card_ids.add(card_id)
             self.dirty = True
 
-    def _add_small_purchase_rule(self, source: str | None, source_id: int, remark: str) -> Category:
+    def _add_small_purchase_rule(self, card: str | None, card_id: int, remark: str) -> Category:
         """Add (or reuse) a literal DINING rule for an unmatched small purchase."""
         pattern = re.escape(remark)
         existing = next((rule for rule in self.rules if rule.pattern == pattern), None)
         if existing is not None:
-            self._record_source(existing, source_id)
+            self._record_card(existing, card_id)
             return existing.as_category()
 
-        self.rules.append(CatRule(pattern, [SMALL_PURCHASE_CATEGORY], {source_id}))
+        self.rules.append(CatRule(pattern, [SMALL_PURCHASE_CATEGORY], {card_id}))
         self.dirty = True
-        logger.info("  AUTO-ADDED dining rule [%s]: %r", source, remark)
+        logger.info("  AUTO-ADDED dining rule [%s]: %r", card, remark)
         return SMALL_PURCHASE_CATEGORY
 
-    def add_rule(self, pattern: str, category_ids: list[int], source_ids: set[int]) -> CatRule:
+    def add_rule(self, pattern: str, category_ids: list[int], card_ids: set[int]) -> CatRule:
         """Add a rule explicitly and mark the set dirty."""
-        rule = CatRule(pattern, category_ids, set(source_ids))
+        rule = CatRule(pattern, category_ids, set(card_ids))
         self.rules.append(rule)
         self.dirty = True
         return rule
 
-    def flush(self) -> bool:
+    def save_if_changed(self) -> bool:
         """Write the rules back sorted, if anything changed. Returns True if written."""
         if not self.dirty:
             return False
         self.write(self.path)
         self.dirty = False
-        logger.info("flushed %s", self.path)
+        logger.info("saved %s", self.path)
         return True
 
     def write(self, path: str | Path) -> None:
@@ -219,6 +215,6 @@ class CatRules:
         """
         with open(path, "w", newline="") as handle:
             writer = csv.writer(handle, lineterminator="\n")
-            writer.writerow(self.header)
+            writer.writerow(CAT_CSV_HEADER)
             for rule in sorted(self.rules, key=CatRule.sort_key):
                 writer.writerow(rule.to_csv_row())

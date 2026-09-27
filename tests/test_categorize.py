@@ -3,30 +3,35 @@
 from __future__ import annotations
 
 import csv
+import os
+import subprocess
+import sys
 
 import pytest
 
 from trex.categorize import brands, regroup
 from trex.categorize.rules import CatRules
 
-UOB_ONE = "UOB-ONE"  # source id 6
-UOB_VISA = "UOB-VISA"  # source id 5
-CHASE = "CHASE"  # source id 1
-
-
-@pytest.fixture
-def rules(data_dir) -> CatRules:
-    return CatRules().load()
+UOB_ONE = "UOB-ONE"  # card id 6
+UOB_VISA = "UOB-VISA"  # card id 5
+CHASE = "CHASE"  # card id 1
 
 
 # --- loading ------------------------------------------------------------
 
 
-def test_importing_the_package_reads_no_files(monkeypatch, tmp_path):
-    """Regression: rules used to load at import time, so a bad cwd crashed the import."""
-    monkeypatch.setenv("TREX_DATA_DIR", str(tmp_path / "does-not-exist"))
-    import trex.categorize  # noqa: F401  -- must not raise
+def test_importing_the_package_reads_no_files(tmp_path):
+    """Regression: rules used to load at import time, so a bad cwd crashed the import.
 
+    Runs in a fresh interpreter: this one imported trex.categorize long ago.
+    """
+    env = {**os.environ, "TREX_DATA_DIR": str(tmp_path / "does-not-exist")}
+    subprocess.run(
+        [sys.executable, "-c", "import trex.categorize, trex.cli"],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+    )
     assert CatRules(tmp_path / "nothing.csv").rules == []
 
 
@@ -61,7 +66,7 @@ def test_writing_cat_csv_leaves_personal_rules_where_they_are(rules):
     before = personal.read_text()
 
     rules.classify_remark(UOB_ONE, 5.00, "ZZZ LATE NIGHT SUPPER")
-    assert rules.flush() is True
+    assert rules.save_if_changed() is True
 
     assert personal.read_text() == before
     assert "SEND EGIFT" not in rules.path.read_text()
@@ -82,16 +87,16 @@ def test_regex_rule_matches_by_prefix(rules):
     assert rules.classify_remark(UOB_ONE, 96.30, "GREENMART SUPERMARKET BISHAN") == 2
 
 
-def test_unknown_source_is_never_categorized(rules):
+def test_unknown_card_is_never_categorized(rules):
     assert rules.classify_remark("NOT-A-CARD", 10.0, "ACME COFFEE HOUSE") is None
 
 
 # --- side effects -------------------------------------------------------
 
 
-def test_matching_on_a_new_card_records_that_source(rules):
+def test_matching_on_a_new_card_records_that_card(rules):
     rules.classify_remark(UOB_VISA, 18.40, "ACME COFFEE HOUSE")
-    assert rules.find("ACME COFFEE HOUSE").source_ids == {5, 6}
+    assert rules.find("ACME COFFEE HOUSE").card_ids == {5, 6}
     assert rules.dirty
 
 
@@ -125,13 +130,13 @@ def test_unmatched_chase_spending_is_holiday_without_adding_a_rule(rules):
 
 def test_flush_is_a_no_op_when_nothing_changed(rules):
     before = rules.path.read_text()
-    assert rules.flush() is False
+    assert rules.save_if_changed() is False
     assert rules.path.read_text() == before
 
 
 def test_flush_writes_sorted_rules_and_clears_dirty(rules):
     rules.classify_remark(UOB_ONE, 5.00, "ZZZ LATE NIGHT SUPPER")
-    assert rules.flush() is True
+    assert rules.save_if_changed() is True
     assert not rules.dirty
 
     reloaded = CatRules(rules.path).load()
@@ -172,8 +177,8 @@ def test_escape_and_unescape_are_inverses():
     assert brands.unescape_literal(".*ACME.*") is None
 
 
-def test_hand_escaped_spaces_still_read_as_literal_text():
-    """Hand-written rules escape spaces; treating those as regexes stopped them grouping."""
+def test_manually_escaped_spaces_still_read_as_literal_text():
+    """Manually written rules escape spaces; treating those as regexes stopped them grouping."""
     assert brands.unescape_literal(r"ACME\ COFFEE\ HOUSE") == "ACME COFFEE HOUSE"
     assert brands.unescape_literal(r"ACME\ \-\ BISHAN") == "ACME - BISHAN"
     assert brands.pick_representative_remark(r"ACME\ COFFEE.*") == "ACME COFFEE"
@@ -225,7 +230,7 @@ def test_regroup_leaves_a_group_with_no_common_prefix_unfused(data_dir):
     path = data_dir / "categories" / "cat.csv"
     with open(path, "w", newline="") as handle:
         writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow(["regex", "category", "source"])
+        writer.writerow(["regex", "category", "card"])
         writer.writerow([r"J\-11 JAPANESE FOOD Singapore", "1", "6"])
         writer.writerow([r"J\-22 RAMEN BAR Singapore", "1", "6"])
 
@@ -240,7 +245,7 @@ def test_a_shared_brand_does_not_license_a_one_letter_prefix(data_dir):
     path = data_dir / "categories" / "cat.csv"
     with open(path, "w", newline="") as handle:
         writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow(["regex", "category", "source"])
+        writer.writerow(["regex", "category", "card"])
         writer.writerow(["Acme Coffee 65-31051486", "1", "6"])
         writer.writerow(["ACME COFFEE HOUSE", "1", "6"])
 
@@ -261,7 +266,7 @@ def test_suggest_brands_surfaces_repeated_tokens(data_dir):
     path = data_dir / "categories" / "cat.csv"
     with open(path, "w", newline="") as handle:
         writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow(["regex", "category", "source"])
+        writer.writerow(["regex", "category", "card"])
         for branch in ("alpha", "beta", "gamma"):
             writer.writerow([f"KOPITIAM {branch}", "1", "6"])
 

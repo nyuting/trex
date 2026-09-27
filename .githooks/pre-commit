@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Fast gate: only the staged files, only checks that finish in well under a second.
+# The heavy gate (mypy, full pytest) lives in .githooks/pre-push.
+
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_lib.sh
+. "${HOOK_DIR}/_lib.sh"
+
+ALL_FILES="$(staged_files)"
+[ -z "$ALL_FILES" ] && exit 0
+
+# --- 1. Private statements -------------------------------------------------
+# Checked first and without uv: this is the one that must never be bypassed by
+# a missing tool. PDFs are real personal statements; see CLAUDE.md.
+while IFS= read -r f; do
+    case "$f" in
+        data/statements/*|*.pdf|*.PDF)
+            fail "'$f' is a statement PDF or sits under data/statements/." \
+                 "Statements are private and never committed. Unstage it:" \
+                 "  git restore --staged '$f'" ;;
+    esac
+done <<< "$ALL_FILES"
+ok "no statement PDFs"
+
+require_uv
+
+# --- 2. Formatting and lint ------------------------------------------------
+# `--check` rather than an in-place rewrite: auto-fixing would leave the index
+# disagreeing with the worktree, which silently commits unreviewed content.
+PY_FILES="$( { staged_files py; staged_files ipynb; } )"
+if [ -n "$PY_FILES" ]; then
+    if ! echo "$PY_FILES" | xargs uv run ruff format --check --quiet; then
+        fail "Some staged Python files are not formatted." \
+             "Fix:  make fmt   (then re-stage with: git add -u)"
+    fi
+    ok "ruff format"
+
+    if ! echo "$PY_FILES" | xargs uv run ruff check; then
+        fail "Ruff found lint errors in staged Python files." \
+             "Many are auto-fixable:  make fmt"
+    fi
+    ok "ruff check"
+fi
+
+# --- 3. Oversized files ----------------------------------------------------
+MAX_BYTES=$((1024 * 1024))
+while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    size=$(wc -c < "$f" | tr -d ' ')
+    if [ "$size" -gt "$MAX_BYTES" ]; then
+        fail "'$f' is $((size / 1024)) KiB, over the 1 MiB limit."
+    fi
+done <<< "$ALL_FILES"
+ok "no oversized files"
+
+# --- 4. Leftover debugging and conflict markers ----------------------------
+while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    case "$f" in
+        *.py)
+            if grep -nE '(^|[^#[:alnum:]_])(breakpoint\(\)|pdb\.set_trace\(\))' "$f"; then
+                fail "'$f' contains a debugger breakpoint." "Remove it before committing."
+            fi ;;
+    esac
+    if grep -qE '^(<{7}|={7}|>{7})( |$)' "$f"; then
+        fail "'$f' still contains merge conflict markers."
+    fi
+done <<< "$ALL_FILES"
+ok "no debug statements or conflict markers"

@@ -23,7 +23,7 @@ BRAND_KEY_PREFIX = "BRAND:"
 REGEX_METACHARACTERS = set(r".^$*+?{}[]\|()")
 
 #: What a backslash may precede in a rule that is still plain text. Wider than
-#: `REGEX_METACHARACTERS` because hand-written rules also escape spaces and
+#: `REGEX_METACHARACTERS` because manually written rules also escape spaces and
 #: hyphens, and a pattern rejected here is treated as an opaque regex and so
 #: never gets grouped.
 ESCAPABLE_CHARACTERS = REGEX_METACHARACTERS | {" ", "-"}
