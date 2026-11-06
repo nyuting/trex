@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./data/statements/**)",
+      "Read(./data/extracted/**)",
+      "Read(./data/parsed/**)",
+      "Read(./data/summary/**)",
+      "Read(./data/categories/cat_personal.csv)",
+      "Read(./data/categories/not_claimable.csv)",
+      "Read(./data/categories/cat_stats.csv)",
+      "Read(./**/*.pdf)",
+      "Read(./**/*.PDF)"
+    ],
+    "ask": [
+      "Read(./data/categories/not_medical.csv)"
+    ]
+  }
+}
